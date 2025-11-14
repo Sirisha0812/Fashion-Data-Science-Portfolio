@@ -90,7 +90,7 @@ def load_embeddings():
             return np.load(emb_path)
     
     # If file not found, show helpful message
-    st.warning("⚠️ Embeddings file not found!")
+    st.warning(" Embeddings file not found!")
     st.info("""
     **The embeddings file (text_embeddings.npy) is too large for GitHub (174MB).**
     
