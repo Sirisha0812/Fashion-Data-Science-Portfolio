@@ -10,8 +10,10 @@ from pathlib import Path
 import sys
 import os
 
-# Import faiss (installed as faiss-cpu package)
+# Import faiss (installed as faiss-cpu package) with fallback to scikit-learn
 faiss_available = False
+use_sklearn_fallback = False
+
 try:
     import faiss
     faiss_available = True
@@ -21,28 +23,25 @@ except ImportError:
         import faiss_cpu as faiss
         faiss_available = True
     except ImportError:
-        st.error("⚠️ FAISS library not found!")
-        st.markdown("""
-        **To fix this issue:**
-        
-        1. **For local development:** Install FAISS:
-           ```bash
-           pip install faiss-cpu
-           ```
-        
-        2. **For Streamlit Cloud:** Ensure `requirements.txt` in the root directory includes:
-           ```
-           faiss-cpu>=1.7.4
-           ```
-           Then redeploy your app.
-        
-        3. **If installation fails:** Try:
-           ```bash
-           pip install --upgrade pip
-           pip install faiss-cpu --no-cache-dir
-           ```
-        """)
-        st.stop()
+        # Fallback to scikit-learn NearestNeighbors
+        try:
+            from sklearn.neighbors import NearestNeighbors
+            use_sklearn_fallback = True
+            st.warning("⚠️ FAISS not available. Using scikit-learn NearestNeighbors (slower but works).")
+        except ImportError:
+            st.error("⚠️ Neither FAISS nor scikit-learn available!")
+            st.markdown("""
+            **To fix this issue:**
+            
+            1. **For local development:** Install FAISS:
+               ```bash
+               pip install faiss-cpu
+               ```
+            
+            2. **For Streamlit Cloud:** The app will use scikit-learn as fallback.
+               Check deployment logs if issues persist.
+            """)
+            st.stop()
 
 # Get the project root directory (fashion-recommendation-system)
 SCRIPT_DIR = Path(__file__).parent
@@ -76,12 +75,16 @@ def load_metadata():
 
 @st.cache_resource
 def load_index():
-    """Load FAISS index."""
-    index_path = PROJECT_ROOT / 'data' / 'embeddings' / 'faiss_index.bin'
-    if not index_path.exists():
-        index_path = Path('fashion-recommendation-system/data/embeddings/faiss_index.bin')
-    if index_path.exists():
-        return faiss.read_index(str(index_path))
+    """Load FAISS index or create sklearn fallback."""
+    if faiss_available:
+        index_path = PROJECT_ROOT / 'data' / 'embeddings' / 'faiss_index.bin'
+        if not index_path.exists():
+            index_path = Path('fashion-recommendation-system/data/embeddings/faiss_index.bin')
+        if index_path.exists():
+            return faiss.read_index(str(index_path))
+    elif use_sklearn_fallback:
+        # Return None - we'll create sklearn index on demand
+        return None
     return None
 
 @st.cache_data
@@ -100,8 +103,20 @@ with st.spinner("Loading data..."):
     index = load_index()
     embeddings = load_embeddings()
 
-if index is None or embeddings is None:
-    st.error("ERROR: FAISS index or embeddings not found!")
+if embeddings is None:
+    st.error("ERROR: Embeddings not found!")
+    st.info("Please run: python3 src/build_recommendation_system.py")
+    st.stop()
+
+# Create sklearn index if FAISS not available
+if use_sklearn_fallback and embeddings is not None:
+    with st.spinner("Building similarity index..."):
+        from sklearn.neighbors import NearestNeighbors
+        sklearn_index = NearestNeighbors(n_neighbors=20, metric='cosine')
+        sklearn_index.fit(embeddings)
+        index = sklearn_index  # Use sklearn index
+elif index is None and faiss_available:
+    st.error("ERROR: FAISS index not found!")
     st.info("Please run: python3 src/build_recommendation_system.py")
     st.stop()
 
@@ -147,14 +162,22 @@ if search_type == "Product ID":
                 # Get product embedding
                 product_embedding = embeddings[product_idx:product_idx+1].astype('float32')
                 
-                # Search
+                # Search using FAISS or sklearn
                 k = num_results + 1
-                distances, indices = index.search(product_embedding, k)
+                if faiss_available:
+                    distances, indices = index.search(product_embedding, k)
+                    distances = distances[0]
+                    indices = indices[0]
+                else:
+                    # Use sklearn NearestNeighbors
+                    distances, indices = index.kneighbors(product_embedding, n_neighbors=k)
+                    distances = distances[0]
+                    indices = indices[0]
                 
                 # Remove the product itself
-                mask = indices[0] != product_idx
-                indices_filtered = indices[0][mask][:num_results]
-                distances_filtered = distances[0][mask][:num_results]
+                mask = indices != product_idx
+                indices_filtered = indices[mask][:num_results]
+                distances_filtered = distances[mask][:num_results]
                 
                 # Get recommendations
                 recommendations = df.iloc[indices_filtered].copy()
