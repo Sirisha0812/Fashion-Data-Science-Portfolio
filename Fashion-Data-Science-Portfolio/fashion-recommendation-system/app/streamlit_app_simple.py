@@ -11,12 +11,38 @@ import sys
 import os
 
 # Import faiss (installed as faiss-cpu package)
+faiss_available = False
 try:
     import faiss
+    faiss_available = True
 except ImportError:
-    st.error("FAISS library not found. Please ensure 'faiss-cpu' is installed.")
-    st.info("Install with: pip install faiss-cpu")
-    st.stop()
+    try:
+        # Try alternative import
+        import faiss_cpu as faiss
+        faiss_available = True
+    except ImportError:
+        st.error("⚠️ FAISS library not found!")
+        st.markdown("""
+        **To fix this issue:**
+        
+        1. **For local development:** Install FAISS:
+           ```bash
+           pip install faiss-cpu
+           ```
+        
+        2. **For Streamlit Cloud:** Ensure `requirements.txt` in the root directory includes:
+           ```
+           faiss-cpu>=1.7.4
+           ```
+           Then redeploy your app.
+        
+        3. **If installation fails:** Try:
+           ```bash
+           pip install --upgrade pip
+           pip install faiss-cpu --no-cache-dir
+           ```
+        """)
+        st.stop()
 
 # Get the project root directory (fashion-recommendation-system)
 SCRIPT_DIR = Path(__file__).parent
