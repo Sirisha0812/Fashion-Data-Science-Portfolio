@@ -6,10 +6,17 @@ Works around file system timeout issues.
 import streamlit as st
 import pandas as pd
 import numpy as np
-import faiss
 from pathlib import Path
 import sys
 import os
+
+# Import faiss (installed as faiss-cpu package)
+try:
+    import faiss
+except ImportError:
+    st.error("FAISS library not found. Please ensure 'faiss-cpu' is installed.")
+    st.info("Install with: pip install faiss-cpu")
+    st.stop()
 
 # Get the project root directory (fashion-recommendation-system)
 SCRIPT_DIR = Path(__file__).parent
