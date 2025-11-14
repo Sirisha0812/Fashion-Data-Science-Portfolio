@@ -88,6 +88,22 @@ def load_embeddings():
     for emb_path in possible_paths:
         if emb_path.exists():
             return np.load(emb_path)
+    
+    # If file not found, show helpful message
+    st.warning("⚠️ Embeddings file not found!")
+    st.info("""
+    **The embeddings file (text_embeddings.npy) is too large for GitHub (174MB).**
+    
+    **For local development:** Ensure the file exists at:
+    `fashion-recommendation-system/data/embeddings/text_embeddings.npy`
+    
+    **For Streamlit Cloud:** You'll need to:
+    1. Host the file externally (Google Drive, Dropbox, S3, etc.)
+    2. Update the app to download it on startup
+    3. Or use Git LFS (requires Git LFS installation)
+    
+    The app will work with just the FAISS index for basic functionality.
+    """)
     return None
 
 # Load data
@@ -96,10 +112,28 @@ with st.spinner("Loading data..."):
     index = load_index()
     embeddings = load_embeddings()
 
-if index is None or embeddings is None:
-    st.error("ERROR: FAISS index or embeddings not found!")
+if index is None:
+    st.error("ERROR: FAISS index not found!")
     st.info("Please run: python3 src/build_recommendation_system.py")
     st.stop()
+
+# Embeddings are optional - app can work with just the index
+# But recommendations will be limited without embeddings
+if embeddings is None:
+    st.warning("⚠️ Embeddings not found - some features may be limited")
+    st.info("""
+    **Note:** The embeddings file (text_embeddings.npy) is 174MB and cannot be stored in GitHub.
+    
+    For full functionality, you need to:
+    1. Host the file externally, OR
+    2. Use Git LFS (if you have it installed)
+    
+    The app will continue with limited functionality.
+    """)
+    # Create a dummy embeddings array for basic functionality
+    # This allows the app to run but won't provide accurate recommendations
+    embeddings = np.zeros((len(df), 512))  # Dummy embeddings
+    st.warning("Using dummy embeddings - recommendations will not be accurate!")
 
 st.success(f"Loaded {len(df):,} products")
 
