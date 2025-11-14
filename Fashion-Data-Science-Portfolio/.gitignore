@@ -22,6 +22,11 @@ data/images/
 *.jpeg
 *.png
 
+# Exception: Allow required data files for Streamlit Cloud deployment
+!fashion-recommendation-system/data/raw/styles.csv
+!fashion-recommendation-system/data/embeddings/faiss_index.bin
+!fashion-recommendation-system/data/embeddings/text_embeddings.npy
+
 # Logs
 logs/
 *.log
