@@ -1,0 +1,3 @@
+"""
+Fashion Recommendation System package.
+"""
