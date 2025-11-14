@@ -62,7 +62,7 @@ def load_metadata():
 
 @st.cache_resource
 def load_index():
-    """Load FAISS index."""
+    """Load FAISS index or create sklearn fallback."""
     # Try multiple paths for Streamlit Cloud compatibility
     possible_paths = [
         Path('fashion-recommendation-system/data/embeddings/faiss_index.bin'),  # From repo root
@@ -70,9 +70,17 @@ def load_index():
         Path(__file__).parent.parent / 'data' / 'embeddings' / 'faiss_index.bin'  # Relative to script
     ]
     
-    for index_path in possible_paths:
-        if index_path.exists():
-            return faiss.read_index(str(index_path))
+    # Try to load FAISS index
+    if faiss_available:
+        for index_path in possible_paths:
+            if index_path.exists():
+                try:
+                    return faiss.read_index(str(index_path))
+                except Exception as e:
+                    st.warning(f"Could not load FAISS index: {e}")
+                    break
+    
+    # Return None - will create sklearn fallback later
     return None
 
 @st.cache_data
@@ -112,15 +120,26 @@ with st.spinner("Loading data..."):
     index = load_index()
     embeddings = load_embeddings()
 
+# Handle missing index - create sklearn fallback if FAISS not available
 if index is None:
-    st.error("ERROR: FAISS index not found!")
-    st.info("Please run: python3 src/build_recommendation_system.py")
-    st.stop()
+    if embeddings is None:
+        st.error("ERROR: Both FAISS index and embeddings not found!")
+        st.info("Please run: python3 src/build_recommendation_system.py")
+        st.stop()
+    
+    # Create sklearn NearestNeighbors as fallback
+    st.info("Using scikit-learn NearestNeighbors (FAISS index not found)")
+    from sklearn.neighbors import NearestNeighbors
+    index = NearestNeighbors(n_neighbors=20, metric='cosine', algorithm='brute')
+    index.fit(embeddings.astype('float32'))
+    use_sklearn = True
+else:
+    use_sklearn = False
 
 # Embeddings are optional - app can work with just the index
 # But recommendations will be limited without embeddings
 if embeddings is None:
-    st.warning("⚠️ Embeddings not found - some features may be limited")
+    st.warning("Embeddings not found - some features may be limited")
     st.info("""
     **Note:** The embeddings file (text_embeddings.npy) is 174MB and cannot be stored in GitHub.
     
@@ -177,14 +196,23 @@ if search_type == "Product ID":
                 # Get product embedding
                 product_embedding = embeddings[product_idx:product_idx+1].astype('float32')
                 
-                # Search
+                # Search using FAISS or sklearn
                 k = num_results + 1
-                distances, indices = index.search(product_embedding, k)
+                if use_sklearn:
+                    # sklearn NearestNeighbors
+                    distances, indices = index.kneighbors(product_embedding, n_neighbors=k)
+                    distances = distances[0]
+                    indices = indices[0]
+                else:
+                    # FAISS
+                    distances, indices = index.search(product_embedding, k)
+                    distances = distances[0]
+                    indices = indices[0]
                 
                 # Remove the product itself
-                mask = indices[0] != product_idx
-                indices_filtered = indices[0][mask][:num_results]
-                distances_filtered = distances[0][mask][:num_results]
+                mask = indices != product_idx
+                indices_filtered = indices[mask][:num_results]
+                distances_filtered = distances[mask][:num_results]
                 
                 # Get recommendations
                 recommendations = df.iloc[indices_filtered].copy()
