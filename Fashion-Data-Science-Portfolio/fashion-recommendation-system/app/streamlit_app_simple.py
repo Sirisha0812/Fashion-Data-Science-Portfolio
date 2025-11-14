@@ -9,6 +9,11 @@ import numpy as np
 import faiss
 from pathlib import Path
 import sys
+import os
+
+# Get the project root directory (fashion-recommendation-system)
+SCRIPT_DIR = Path(__file__).parent
+PROJECT_ROOT = SCRIPT_DIR.parent
 
 # Page config
 st.set_page_config(
@@ -24,7 +29,11 @@ st.markdown("Find similar fashion products using AI-powered recommendations")
 @st.cache_data
 def load_metadata():
     """Load product metadata."""
-    csv_path = Path('data/raw/styles.csv')
+    # Path relative to project root (fashion-recommendation-system)
+    csv_path = PROJECT_ROOT / 'data' / 'raw' / 'styles.csv'
+    if not csv_path.exists():
+        # Try alternative path if running from project root
+        csv_path = Path('fashion-recommendation-system/data/raw/styles.csv')
     try:
         df = pd.read_csv(csv_path, on_bad_lines='skip', low_memory=False)
         return df
@@ -35,7 +44,9 @@ def load_metadata():
 @st.cache_resource
 def load_index():
     """Load FAISS index."""
-    index_path = Path('data/embeddings/faiss_index.bin')
+    index_path = PROJECT_ROOT / 'data' / 'embeddings' / 'faiss_index.bin'
+    if not index_path.exists():
+        index_path = Path('fashion-recommendation-system/data/embeddings/faiss_index.bin')
     if index_path.exists():
         return faiss.read_index(str(index_path))
     return None
@@ -43,7 +54,9 @@ def load_index():
 @st.cache_data
 def load_embeddings():
     """Load embeddings."""
-    emb_path = Path('data/embeddings/text_embeddings.npy')
+    emb_path = PROJECT_ROOT / 'data' / 'embeddings' / 'text_embeddings.npy'
+    if not emb_path.exists():
+        emb_path = Path('fashion-recommendation-system/data/embeddings/text_embeddings.npy')
     if emb_path.exists():
         return np.load(emb_path)
     return None
